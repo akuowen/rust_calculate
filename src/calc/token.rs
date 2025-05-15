@@ -42,8 +42,6 @@ pub enum Token {
     RightFuncParen,
     // ,
     Comma,
-    // 表达式参数
-    Expr(Vec<Token>),
     EOF,
 }
 
@@ -128,7 +126,7 @@ impl Display for Token {
                     }
                     
                     // Wrap each argument list in parentheses
-                    f.write_str("(")?;
+                    // f.write_str("(")?;
                     
                     // Format tokens within each argument
                     for (j, t) in arg.iter().enumerate() {
@@ -140,30 +138,14 @@ impl Display for Token {
                     }
                     
                     // Close the argument parenthesis
-                    f.write_str(")")?;
+                    // f.write_str(")")?;
                 }
                 
                 // Close the function bracket
                 f.write_str(">")
             },
             
-            // Format expressions as: (token1 token2 ...)
-            Self::Expr(tokens) => {
-                // Open with parenthesis
-                f.write_str("(")?;
-                
-                // Format each token in the expression
-                for (i, t) in tokens.iter().enumerate() {
-                    // Add space between tokens
-                    if i > 0 {
-                        f.write_str(" ")?;
-                    }
-                    write!(f, "{}", t)?;
-                }
-                
-                // Close with parenthesis
-                f.write_str(")")
-            },
+          
             
             // Format other operators and symbols
             Self::Caret => f.write_str("^"),

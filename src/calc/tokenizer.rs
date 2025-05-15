@@ -2,6 +2,7 @@ use crate::calc::token::Token;
 use serde::{Serialize, Serializer};
 use std::iter::Peekable;
 use std::str::Chars;
+use log::{debug, info};
 
 /// A tokenizer that parses an expression string into a sequence of tokens.
 ///
@@ -16,7 +17,13 @@ pub struct Tokenizer<'a> {
     unexpected_char: Option<char>,
 }
 
-/// Serializable representation of a Tokenizer's state
+impl<'a> Tokenizer<'a> {
+    pub(crate) fn get_unexpected_char(&self) -> Option<char> {
+        todo!()
+    }
+}
+
+/// Serializable representation of a Tokenizers state
 #[derive(Serialize)]
 struct TokenizerSerializable<'a> {
     /// The original expression as a string
@@ -53,8 +60,7 @@ impl<'a> Serialize for Tokenizer<'a> {
     }
 }
 
-#[allow(unused)]
-impl<'a> Tokenizer<'a> {
+impl <'a> Tokenizer<'a>{
     /// Creates a new Tokenizer from the given expression string.
     ///
     /// # Arguments
@@ -64,7 +70,7 @@ impl<'a> Tokenizer<'a> {
     /// # Returns
     ///
     /// A new Tokenizer instance initialized with the given expression
-    fn new(expression: &'a str) -> Self {
+    pub fn new(expression: &'a str) -> Self {
         Self {
             expression: expression.chars().peekable(),
             original_expression: expression,
@@ -72,134 +78,20 @@ impl<'a> Tokenizer<'a> {
             unexpected_char: None,
         }
     }
-
-    /// Returns any unexpected character encountered during tokenization.
-    ///
-    /// If the tokenizer encounters a character it cannot process, this method
-    /// will return that character. Otherwise, it returns None.
-    ///
-    /// # Returns
-    ///
-    /// An Option containing the unexpected character, or None if no unexpected
-    /// character has been encountered
-    pub fn get_unexpected_char(&self) -> Option<char> {
-        self.unexpected_char
-    }
-
-    /// Returns a clone of the current expression iterator.
-    ///
-    /// This method is primarily used for debugging and testing purposes.
-    ///
-    /// # Returns
-    ///
-    /// A cloned Peekable iterator over the expression's characters
-    fn get_expression(&self) -> Peekable<Chars<'a>> {
-        self.expression.clone()
-    }
-
-    /// Serializes the tokenizer to a JSON string.
-    ///
-    /// This method collects all tokens from the tokenizer and serializes them
-    /// along with the original expression and other state information.
-    ///
-    /// # Returns
-    ///
-    /// A Result containing the JSON string if serialization was successful,
-    /// or an error if serialization failed
-    pub fn to_json(&self) -> Result<String, serde_json::Error> {
-        serde_json::to_string(self)
-    }
-
-    /// Returns the original expression string.
-    ///
-    /// # Returns
-    ///
-    /// The original expression string that was used to create this tokenizer
-    pub fn get_original_expression(&self) -> &str {
-        self.original_expression
-    }
 }
 
-impl<'a> Iterator for Tokenizer<'a> {
-    type Item = Token;
-
-    /// Returns the next token in the expression.
-    ///
-    /// This method implements the Iterator trait for the Tokenizer. It processes the input
-    /// expression character by character and converts it into appropriate Token variants.
-    /// The method handles:
-    /// - Whitespace (skipped)
-    /// - Numbers (parsed as Token::Number)
-    /// - Alphabetic characters (parsed as Token::Variable or as function calls)
-    /// - Operators (+, -, *, /, ^)
-    /// - Parentheses and brackets
-    /// - End of file (EOF)
-    ///
-    /// # Returns
-    ///
-    /// * `Some(Token)` - The next token in the expression
-    /// * `None` - If the end of the expression has been reached
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.end {
-            return None;
-        }
-        let option = self.expression.next();
-        match option {
-            None => {
-                self.end = true;
-                Some(Token::EOF)
-            }
-            Some(space) if space.is_whitespace() => {
-                while let Some(_) = self.expression.next_if(|c| c.is_whitespace()) {}
-                self.next()
-            }
-            Some(num) if num.is_numeric() => {
-                let mut number = String::from(num);
-                while let Some(next) = self.expression.next_if(|c| c.is_numeric()) {
-                    number.push(next)
-                }
-                Some(Token::Number(number.parse().unwrap()))
-            }
-            Some(word) if word.is_ascii_alphabetic() => {
-                let mut words = String::from(word);
-                while let Some(word) = self
-                    .expression
-                    .next_if(|word| word.is_ascii_alphabetic() || word.is_whitespace())
-                {
-                    if !word.is_whitespace() {
-                        words.push(word);
-                    }
-                }
-                if self.expression.peek() == Some(&'<') {
-                    self.expression.next(); // consume '<'
-                    Some(self.parse_function(words))
-                } else {
-                    Some(Token::Variable(words))
-                }
-            }
-            Some('+') => Some(Token::Add),
-            Some('-') => Some(Token::Sub),
-            Some('*') => Some(Token::Mul),
-            Some('/') => Some(Token::Div),
-            Some('^') => Some(Token::Caret),
-            Some('(') => Some(Token::LeftSmallParen),
-            Some(')') => Some(Token::RightSmallParen),
-            Some('[') => Some(Token::LeftMidParen),
-            Some(']') => Some(Token::RightMidParen),
-            Some('{') => Some(Token::LeftBigParen),
-            Some('}') => Some(Token::RightBigParen),
-            Some(',') => self.next(), // 跳过逗号
-            Some('>') => self.next(), // 跳过 >
-            Some('<') => Some(Token::LeftFuncParen),
-            Some(c) => {
-                println!("{c}");
-                None
-            }
-        }
-    }
-}
-
+#[allow(unused)]
 impl<'a> Tokenizer<'a> {
+
+
+    fn judge_function_part(&mut self) -> bool {
+        self.expression.peek() == Some(&'<')
+    }
+
+    fn stepping_expression(&mut self) {
+        self.expression.next();
+    }
+
     /// Parses a function expression and its parameters.
     ///
     /// This method handles the parsing of function expressions in the format `func<param1, param2, ...>`.
@@ -207,7 +99,7 @@ impl<'a> Tokenizer<'a> {
     /// The method maintains counters for different types of brackets to ensure proper nesting:
     /// - angle: for function brackets `<` and `>`
     /// - paren: for small parentheses `(` and `)`
-    /// - bracket: for mid parentheses `[` and `]`
+    /// - bracket: for mid-parentheses `[` and `]`
     /// - brace: for big parentheses `{` and `}`
     ///
     /// # Arguments
@@ -224,7 +116,6 @@ impl<'a> Tokenizer<'a> {
         let mut paren = 0; // ( 计数
         let mut bracket = 0; // [ 计数
         let mut brace = 0; // { 计数
-
         // 辅助函数：将当前收集的 tokens 添加到参数列表中
         let add_current_tokens_to_args = |tokens: &mut Vec<Token>, args: &mut Vec<Vec<Token>>| {
             if tokens.is_empty() {
@@ -238,7 +129,7 @@ impl<'a> Tokenizer<'a> {
 
         loop {
             let token = self.next_token_for_parse();
-
+            debug!("parse function token is {:?}",token);
             match &token {
                 Some(Token::Comma) => {
                     if paren > 0 || bracket > 0 || brace > 0 {
@@ -258,13 +149,22 @@ impl<'a> Tokenizer<'a> {
                     }
                 }
 
+                Some(Token::LeftFuncParen) => {
+                    angle += 1;
+                    if angle > 1 {
+                        // 嵌套函数的左括号
+                        current_param.push(Token::LeftFuncParen);
+                    }
+                }
+
+
                 Some(Token::RightFuncParen) => {
+                    angle -= 1;
                     if angle == 0 && paren == 0 && bracket == 0 && brace == 0 {
                         // 顶层函数结束
                         add_current_tokens_to_args(&mut current_param, &mut args);
                         break;
                     } else {
-                        angle -= 1;
                         if angle > 0 {
                             // 嵌套函数的右括号
                             current_param.push(Token::RightFuncParen);
@@ -273,17 +173,10 @@ impl<'a> Tokenizer<'a> {
                 }
 
                 Some(Token::EOF) | None => {
+                    current_param.push(Token::EOF);
                     // 文件结束或无更多 token
                     add_current_tokens_to_args(&mut current_param, &mut args);
                     break;
-                }
-
-                Some(Token::LeftFuncParen) => {
-                    angle += 1;
-                    if angle > 1 {
-                        // 嵌套函数的左括号
-                        current_param.push(Token::LeftFuncParen);
-                    }
                 }
 
                 Some(Token::LeftSmallParen) => {
@@ -326,7 +219,7 @@ impl<'a> Tokenizer<'a> {
                         brace -= 1;
                         current_param.push(Token::RightBigParen);
                     }
-                    // 忽略多余的右大括号
+                    // 忽略多余的右大括号zs
                 }
 
                 Some(t) => {
@@ -334,6 +227,7 @@ impl<'a> Tokenizer<'a> {
                     current_param.push(t.clone());
                 }
             }
+            debug!("this is  angle:{angle}")
         }
 
         // 创建并返回函数 token
@@ -341,6 +235,23 @@ impl<'a> Tokenizer<'a> {
             function_prefix: func_name,
             args,
         }
+    }
+
+    fn collect_alphabetic_chars(&mut self, initial_char: char) -> String {
+        let mut words = String::with_capacity(8); // Pre-allocate reasonable capacity
+        words.push(initial_char);
+
+        // Collect all consecutive alphabetic characters, ignoring whitespace
+        while let Some(word) = self
+            .expression
+            .next_if(|word| word.is_ascii_alphabetic() || word.is_whitespace())
+        {
+            if !word.is_whitespace() {
+                words.push(word);
+            }
+        }
+
+        words
     }
 
     /// Returns the next token from the expression for parsing functions.
@@ -354,7 +265,29 @@ impl<'a> Tokenizer<'a> {
     ///
     /// * `Some(Token)` - The next token in the expression
     /// * `None` - If the end of the expression has been reached or an unexpected character is encountered
+    ///
     fn next_token_for_parse(&mut self) -> Option<Token> {
+        self.next_token_internal(true, true)
+    }
+
+    /// Returns the next token from the expression with configurable behavior for special characters.
+    ///
+    /// This is a common implementation used by both `next()` and `next_token_for_parse()`.
+    ///
+    /// # Arguments
+    ///
+    /// * `include_comma` - If true, returns Token::Comma for commas; otherwise skips them
+    /// * `include_right_func_paren` - If true, returns Token::RightFuncParen for '>'; otherwise skips it
+    ///
+    /// # Returns
+    ///
+    /// * `Some(Token)` - The next token in the expression
+    /// * `None` - If the end of the expression has been reached or an unexpected character is encountered
+    fn next_token_internal(
+        &mut self,
+        include_comma: bool,
+        include_right_func_paren: bool,
+    ) -> Option<Token> {
         if self.end {
             return None;
         }
@@ -366,7 +299,7 @@ impl<'a> Tokenizer<'a> {
             }
             Some(space) if space.is_whitespace() => {
                 while let Some(_) = self.expression.next_if(|c| c.is_whitespace()) {}
-                self.next_token_for_parse()
+                self.next_token_internal(include_comma, include_right_func_paren)
             }
             Some(num) if num.is_numeric() => {
                 let mut number = String::from(num);
@@ -376,17 +309,11 @@ impl<'a> Tokenizer<'a> {
                 Some(Token::Number(number.parse().unwrap()))
             }
             Some(word) if word.is_ascii_alphabetic() => {
-                let mut words = String::from(word);
-                while let Some(word) = self
-                    .expression
-                    .next_if(|word| word.is_ascii_alphabetic() || word.is_whitespace())
-                {
-                    if !word.is_whitespace() {
-                        words.push(word);
-                    }
-                }
-                if self.expression.peek() == Some(&'<') {
-                    self.expression.next(); // consume '<'
+                let words = self.collect_alphabetic_chars(word);
+
+                if self.judge_function_part() {
+                    // consume '<'
+                   // self.stepping_expression();
                     Some(self.parse_function(words))
                 } else {
                     Some(Token::Variable(words))
@@ -403,14 +330,50 @@ impl<'a> Tokenizer<'a> {
             Some(']') => Some(Token::RightMidParen),
             Some('{') => Some(Token::LeftBigParen),
             Some('}') => Some(Token::RightBigParen),
-            Some(',') => Some(Token::Comma),
-            Some('>') => Some(Token::RightFuncParen),
+            Some(',') => {
+                if include_comma {
+                    Some(Token::Comma)
+                } else {
+                    self.next_token_internal(include_comma, include_right_func_paren)
+                }
+            }
+            Some('>') => {
+                if include_right_func_paren {
+                    Some(Token::RightFuncParen)
+                } else {
+                    self.next_token_internal(include_comma, include_right_func_paren)
+                }
+            }
             Some('<') => Some(Token::LeftFuncParen),
             Some(c) => {
                 println!("{c}");
                 None
             }
         }
+    }
+}
+
+impl<'a> Iterator for Tokenizer<'a> {
+    type Item = Token;
+
+    /// Returns the next token in the expression.
+    ///
+    /// This method implements the Iterator trait for the Tokenizer. It processes the input
+    /// expression character by character and converts it into appropriate Token variants.
+    /// The method handles:
+    /// - Whitespace (skipped)
+    /// - Numbers (parsed as Token::Number)
+    /// - Alphabetic characters (parsed as Token::Variable or as function calls)
+    /// - Operators (+, -, *, /, ^)
+    /// - Parentheses and brackets
+    /// - End of file (EOF)
+    ///
+    /// # Returns
+    ///
+    /// * `Some(Token)` - The next token in the expression
+    /// * `None` - If the end of the expression has been reached
+    fn next(&mut self) -> Option<Self::Item> {
+        self.next_token_internal(false, false)
     }
 }
 
@@ -430,7 +393,7 @@ mod tests {
         assert_eq!(tokenizer.end, false);
         assert_eq!(tokenizer.unexpected_char, None);
         let v: Vec<_> = tokenizer.collect();
-        assert_eq!(v, vec![ Number(dec!(1)),  Add, Number(dec!(2)),EOF]);
+        assert_eq!(v, vec![Number(dec!(1)), Add, Number(dec!(2)), EOF]);
     }
 
     /// Tests tokenization of a simple addition expression.
@@ -481,9 +444,28 @@ mod tests {
     /// with multiple parameters, brackets, and operators.
     #[test]
     fn test_function_2() {
-        let tokenizer = Tokenizer::new("1 + 2 * nvl < abs < 1 + 2 * 3 + [ ( 1+ 3 ) / 2 ] ) , 0 > , 0 >");
+        let mut builder = env_logger::Builder::new();
+        builder
+            .format(|buf, record| {
+                use std::io::Write;
+                let thread_id = std::thread::current().id();
+                writeln!(
+                    buf,
+                    "{} [{:?}] {} - {}",
+                    chrono::Local::now().format("%Y-%m-%d %H:%M:%S%.3f"),
+                    thread_id,
+                    record.level(),
+                    record.args()
+                )
+            })
+            .filter(None, log::LevelFilter::Info)
+            .init();
+
+        let tokenizer =
+            Tokenizer::new("1 + 2 * nvl < abs < 1 + 2 * 3 + [ ( 1+ 3 ) / 2 ] ) , 0 > , 0 >");
         let v: Vec<_> = tokenizer.clone().collect();
-        println!("{:?}", serde_json::to_string(&v).unwrap());
+        debug!("{:?}",v.get(4));
+        info!("{:?}",serde_json::to_string(&v).unwrap());
         assert_eq!(
             v,
             vec![
@@ -543,6 +525,22 @@ mod tests {
                 EOF
             ]
         );
+    }
+
+    #[cfg(test)]
+    impl<'a> Tokenizer<'a> {
+        /// Serializes the tokenizer to a JSON string.
+        ///
+        /// This method collects all tokens from the tokenizer and serializes them
+        /// along with the original expression and other state information.
+        ///
+        /// # Returns
+        ///
+        /// A Result containing the JSON string if serialization was successful,
+        /// or an error if serialization failed
+        pub fn to_json(&self) -> Result<String, serde_json::Error> {
+            serde_json::to_string(self)
+        }
     }
 
     /// Tests serialization of a Tokenizer instance to a JSON string.
